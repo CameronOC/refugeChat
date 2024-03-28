@@ -33,7 +33,7 @@ function onMessageHandler (target, context, msg, self) {
 
 // Function called when the "dice" command is issued
 function getDJ () {
-  return 'Khlokat'
+  return '<Current DJ>'
 }
 
 // Called every time the bot connects to Twitch chat
