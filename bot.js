@@ -1,13 +1,12 @@
 const tmi = require('tmi.js');
 const oauth = require('./auth.js');
+const set = require('./set.json');
 // import { REST, Routes } from 'discord.js';
 
 // Define configuration options
 const opts = oauth.opts;
-
 // Create a client with our options
 const client = new tmi.client(opts);
-
 // Register our event handlers (defined below)
 client.on('message', onMessageHandler);
 client.on('connected', onConnectedHandler);
@@ -18,11 +17,15 @@ client.connect();
 const sendCommands =  (data) => {
   let date = new Date();
   const minutes = date.getMinutes();
+  const dj = getDJ();
+  console.log(dj);
   console.log(`Checking current minute ${minutes}`);
   if(minutes === 0){
     console.log(`Getting current DJ`);
+    const dj = getDJ();
+    console.log(dj);
     try {
-      client.say(opts.channels[0], getDJ);
+      client.say(opts.channels[0], dj);
     } catch(e){
       console.log(e);
     }
@@ -30,6 +33,7 @@ const sendCommands =  (data) => {
     console.log(`Pasting commands for users to utilize`);
 
     try {
+      console.log()
     client.say(opts.channels[0], `To get the current dj send !dj`);
     }catch(e){
       console.log(e);
@@ -60,13 +64,19 @@ function onMessageHandler (target, context, msg, self) {
 
 // Function called when the "dj" command is issued
 function getDJ () {
-  let dj = 'dj';
+  const date = new Date();
+  let hour = date.getHours().toString();
+  console.log(`current hour ${hour}`);
+  let dj = set[`${hour}`];
+  console.log(dj);
   return `The current DJ is: ${dj}`
 }
 
 // Called every time the bot connects to Twitch chat
 function onConnectedHandler (addr, port) {
   console.log(`* Connected to ${addr}:${port}`);
+  let dj = getDJ();
+  console.log(set[`16`]);
   console.log(`Beginning send Commands info for twitch enjoyers`);
   setInterval(sendCommands, 60000);
 }
