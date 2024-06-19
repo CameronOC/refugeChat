@@ -17,24 +17,18 @@ client.connect();
 const sendCommands =  (data) => {
   let date = new Date();
   const minutes = date.getMinutes();
-  const dj = getDJ();
-  console.log(dj);
   console.log(`Checking current minute ${minutes}`);
   if(minutes === 0){
-    console.log(`Getting current DJ`);
-    const dj = getDJ();
-    console.log(dj);
     try {
+      const dj = getDJ();
       client.say(opts.channels[0], dj);
     } catch(e){
       console.log(e);
     }
-  } else if(minutes % 10 === 0){
+  } else if(minutes % 30 === 0){
     console.log(`Pasting commands for users to utilize`);
-
     try {
-      console.log()
-    client.say(opts.channels[0], `To get the current dj send !dj`);
+      client.say(opts.channels[0], `To get the current dj type !dj`);
     }catch(e){
       console.log(e);
     }
@@ -52,11 +46,19 @@ function onMessageHandler (target, context, msg, self) {
   // If the command is known, let's execute it
   if (commandName === '!dj') {
     try {
-    client.say(target, getDJ);
-    console.log(`* Executed ${commandName} command`);
+      const dj = getDJ();
+      client.say(target, dj);
+      console.log(`* Executed ${commandName} command`);
     }catch(e){
       console.log(`Could not execute dj command ${e}`);
     }
+  } else if(commandName === '!set'){
+    try {
+    const setList = getSet();
+    client.say(target, setList);
+  }catch(e){
+    console.log(`Could not execute dj command ${e}`);
+  }
   } else {
     console.log(`* Unknown command ${commandName}`);
   }
@@ -65,18 +67,25 @@ function onMessageHandler (target, context, msg, self) {
 // Function called when the "dj" command is issued
 function getDJ () {
   const date = new Date();
-  let hour = date.getHours().toString();
-  console.log(`current hour ${hour}`);
-  let dj = set[`${hour}`];
-  console.log(dj);
+  let hour = date.getHours();
+  const dj = set[hour];
+  if(!dj) return `current dj is unknown`;
   return `The current DJ is: ${dj}`
+}
+
+  // Function called when the "dj" command is issued
+  function getSet () {
+    let setList = '';
+    for(let key in set){
+      setList.concat(`At ${key}:00 PST ${set[key]} will be on\n`);
+    }
+    if(!setList) return `current dj is unknown`;
+    return setList;
 }
 
 // Called every time the bot connects to Twitch chat
 function onConnectedHandler (addr, port) {
   console.log(`* Connected to ${addr}:${port}`);
-  let dj = getDJ();
-  console.log(set[`16`]);
   console.log(`Beginning send Commands info for twitch enjoyers`);
   setInterval(sendCommands, 60000);
 }

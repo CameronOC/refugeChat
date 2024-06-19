@@ -1,5 +1,5 @@
 // Replace with twith oauth token generated
-const token = `<TOKEN>`;
+const token = `q1u8by6nxw8gmmwkxz6onap8st2h2d`;
 const auth = `oauth:${token}`;
 const opts = {
     identity: {
