@@ -14,6 +14,7 @@ client.on('connected', onConnectedHandler);
 // Connect to Twitch:
 client.connect();
 // Comands for the bot 
+console.log(getSet());
 const sendCommands =  (data) => {
   let date = new Date();
   const minutes = date.getMinutes();
@@ -73,14 +74,17 @@ function getDJ () {
   return `The current DJ is: ${dj}`
 }
 
-  // Function called when the "dj" command is issued
-  function getSet () {
-    let setList = '';
-    for(let key in set){
-      setList.concat(`At ${key}:00 PST ${set[key]} will be on\n`);
-    }
-    if(!setList) return `current dj is unknown`;
-    return setList;
+// Function called when the "dj" command is issued
+function getSet () {
+  let setList = ``;
+  for(let key in set){
+    setList += `
+    ${key}:00 PST ${set[key]}`;
+  }
+
+  console.log(setList);
+  if(!setList) return `current dj is unknown`;
+  return setList;
 }
 
 // Called every time the bot connects to Twitch chat
