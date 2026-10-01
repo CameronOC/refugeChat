@@ -77,25 +77,43 @@ function onMessageHandler (target, context, msg, self) {
   }
 }
 
-// Function called when the "dj" command is issued
-function getDJ () {
-  const date = new Date();
-  let hour = date.getHours();
-  const dj = set[hour];
-  if(!dj) return `current dj is unknown`;
-  return `The current DJ is: ${dj}`
+// Sets are 90 minutes and land on half hours, so slots are matched by
+// minutes-since-midnight rather than by whole hour.
+function toMinutes (hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+// 15:00 -> "3:00 PM"
+function to12h (hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${suffix}`;
 }
 
 // Function called when the "dj" command is issued
+function getDJ () {
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const slot = set.find(s => {
+    const start = toMinutes(s.start);
+    return mins >= start && mins < start + s.mins;
+  });
+  if(!slot) return `No set on right now`;
+  return `The current DJ is: ${slot.dj}`
+}
+
+// Function called when the "set" command is issued
 function getSet () {
-  let setList = ``;
-  for(let key in set){
+  if(!set.length) return `no lineup set`;
+  let setList = `Lineup: (times are in YOUR TIMEZONE)`;
+  for(const s of set){
     setList += `
-    ${key}:00 PST ${set[key]}`;
+    ${to12h(s.start)} ${s.dj} (${s.mins} min)`;
   }
 
   console.log(setList);
-  if(!setList) return `current dj is unknown`;
   return setList;
 }
 
