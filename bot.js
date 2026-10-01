@@ -1,18 +1,30 @@
 const tmi = require('tmi.js');
-const oauth = require('./auth.js');
+const { getOpts } = require('./auth.js');
 const set = require('./set.json');
 // import { REST, Routes } from 'discord.js';
 
-// Define configuration options
-const opts = oauth.opts;
-// Create a client with our options
-const client = new tmi.client(opts);
+// Options are resolved asynchronously - token.js mints a fresh access token
+// from the stored refresh token before we connect.
+let opts;
+let client;
 // Register our event handlers (defined below)
-client.on('message', onMessageHandler);
-client.on('connected', onConnectedHandler);
+function wire() {
+  client.on('message', onMessageHandler);
+  client.on('connected', onConnectedHandler);
+}
 
 // Connect to Twitch:
-client.connect();
+(async () => {
+  try {
+    opts = await getOpts();
+    client = new tmi.client(opts);
+    wire();
+    await client.connect();
+  } catch (e) {
+    console.error('[startup]', e.message);
+    process.exit(1);
+  }
+})();
 // Comands for the bot 
 console.log(getSet());
 const sendCommands =  (data) => {
