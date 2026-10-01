@@ -1,2 +1,5 @@
 auth.js
 node_modules
+
+.env
+auth.js.orig
