@@ -75,6 +75,9 @@ function onMessageHandler (target, context, msg, self) {
   } else if(commandName === '!deez'){
     client.say(target, `deez nuts`);
     console.log(`* Executed ${commandName} command`);
+  } else if(commandName === '!penis'){
+    client.say(target, `penis`);
+    console.log(`* Executed ${commandName} command`);
   } else {
     console.log(`* Unknown command ${commandName}`);
   }
