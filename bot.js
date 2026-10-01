@@ -1,6 +1,6 @@
 const tmi = require('tmi.js');
 const { getOpts } = require('./auth.js');
-const set = require('./set.json');
+const { getLineup, futureOnly } = require('./lineup.js');
 // import { REST, Routes } from 'discord.js';
 
 // Options are resolved asynchronously - token.js mints a fresh access token
@@ -25,15 +25,17 @@ function wire() {
     process.exit(1);
   }
 })();
-// Comands for the bot 
-console.log(getSet());
-const sendCommands =  (data) => {
+// Comands for the bot
+// Warms the lineup cache at startup and surfaces a bad Discord token in the
+// logs immediately, rather than on the first !set in chat.
+getSet().then(l => console.log(l)).catch(e => console.log(`[lineup] ${e.message}`));
+const sendCommands = async (data) => {
   let date = new Date();
   const minutes = date.getMinutes();
   console.log(`Checking current minute ${minutes}`);
   if(minutes === 0){
     try {
-      const dj = getDJ();
+      const dj = await getDJ();
       client.say(opts.channels[0], dj);
     } catch(e){
       console.log(e);
@@ -49,7 +51,7 @@ const sendCommands =  (data) => {
 };
 
 // Called every time a message comes in
-function onMessageHandler (target, context, msg, self) {
+async function onMessageHandler (target, context, msg, self) {
   if (self) { return; } // Ignore messages from the bot
 
   // Remove whitespace from chat message
@@ -59,7 +61,7 @@ function onMessageHandler (target, context, msg, self) {
   // If the command is known, let's execute it
   if (commandName === '!dj') {
     try {
-      const dj = getDJ();
+      const dj = await getDJ();
       client.say(target, dj);
       console.log(`* Executed ${commandName} command`);
     }catch(e){
@@ -83,43 +85,37 @@ function onMessageHandler (target, context, msg, self) {
   }
 }
 
-// Sets are 90 minutes and land on half hours, so slots are matched by
-// minutes-since-midnight rather than by whole hour.
-function toMinutes (hhmm) {
-  const [h, m] = hhmm.split(':').map(Number);
-  return h * 60 + m;
+// Slots carry real Date objects, so formatting is all that is left here.
+// 15:00 -> "3:00 PM", in the host timezone (TZ is set in docker-compose.yml).
+function fmtTime (d) {
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
-// 15:00 -> "3:00 PM"
-function to12h (hhmm) {
-  const [h, m] = hhmm.split(':').map(Number);
-  const suffix = h >= 12 ? 'PM' : 'AM';
-  const hour = h % 12 === 0 ? 12 : h % 12;
-  return `${hour}:${String(m).padStart(2, '0')} ${suffix}`;
+function slotMins (s) {
+  return Math.round((s.end.getTime() - s.start.getTime()) / 60000);
 }
 
 // Function called when the "dj" command is issued
-function getDJ () {
-  const now = new Date();
-  const mins = now.getHours() * 60 + now.getMinutes();
-  const slot = set.find(s => {
-    const start = toMinutes(s.start);
-    return mins >= start && mins < start + s.mins;
-  });
+async function getDJ () {
+  const { slots } = await getLineup();
+  const now = Date.now();
+  const slot = slots.find(s => now >= s.start.getTime() && now < s.end.getTime());
   if(!slot) return `No set on right now`;
   return `The current DJ is: ${slot.dj}`
 }
 
 // Function called when the "set" command is issued
-function getSet () {
-  if(!set.length) return `no lineup set`;
+async function getSet () {
+  const { slots, source } = await getLineup();
+  const upcoming = futureOnly(slots);
+  if(!upcoming.length) return `No lineup set`;
   let setList = `Lineup: (times are in YOUR TIMEZONE)`;
-  for(const s of set){
+  for(const s of upcoming){
     setList += `
-    ${to12h(s.start)} ${s.dj} (${s.mins} min)`;
+    ${fmtTime(s.start)} ${s.dj} (${slotMins(s)} min)`;
   }
 
-  console.log(setList);
+  console.log(`[lineup] served from ${source}`);
   return setList;
 }
 

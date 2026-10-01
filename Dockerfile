@@ -1,5 +1,9 @@
 FROM node:22-alpine
 
+# Without tzdata, musl ignores TZ and the shell's `date` reports UTC while Node
+# (bundled ICU) correctly reports local - a confusing split while debugging.
+RUN apk add --no-cache tzdata
+
 WORKDIR /app
 
 # Install deps as a separate layer so source edits do not re-run npm ci.
