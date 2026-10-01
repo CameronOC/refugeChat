@@ -10,7 +10,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const CACHE = path.join(__dirname, '.token-cache.json');
+// Overridable so the container can keep the cache on a mounted volume - a
+// cache written inside the image would be lost on every rebuild, forcing a
+// re-authorize.
+const CACHE = process.env.TOKEN_CACHE || path.join(__dirname, '.token-cache.json');
 const SKEW_MS = 10 * 60 * 1000;
 
 function readCache() {
@@ -24,7 +27,11 @@ function writeCache(obj) {
 async function refresh() {
   const id = process.env.TWITCH_CLIENT_ID;
   const secret = process.env.TWITCH_CLIENT_SECRET;
-  const refreshToken = process.env.TWITCH_REFRESH_TOKEN || (readCache() || {}).refresh_token;
+  // Cache first, env second. Twitch may rotate the refresh token on any
+  // refresh, and the cache holds the newest one - the env var is only a
+  // bootstrap seed, frozen at process start, so preferring it would make us
+  // replay a superseded token forever.
+  const refreshToken = (readCache() || {}).refresh_token || process.env.TWITCH_REFRESH_TOKEN;
   if (!id || !secret || !refreshToken) {
     throw new Error('need TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET and TWITCH_REFRESH_TOKEN ' +
                     '(run `node authorize.js` once to obtain the refresh token)');

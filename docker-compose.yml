@@ -1,0 +1,32 @@
+# refugeChat - Twitch chat bot, built from this repo (CameronOC/refugeChat).
+#
+# Credentials come from .env (chmod 600, gitignored) and never from the image.
+# The bot mints its own Twitch access tokens from a refresh token, so the only
+# manual step is the one-time authorize flow documented in .env.
+#
+# ./data holds .token-cache.json and MUST be a volume: refresh tokens rotate on
+# every refresh, and a cache baked into the image would be lost on each rebuild,
+# forcing a fresh browser authorization.
+services:
+  refugechat:
+    build: .
+    image: refugechat:local
+    container_name: refugechat
+    labels:
+      # Locally built - there is no registry tag for Watchtower to poll, so it
+      # would never find an update. Rebuild with `docker compose up -d --build`.
+      - "com.centurylinklabs.watchtower.enable=false"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - TZ=America/Los_Angeles
+      - TOKEN_CACHE=/data/.token-cache.json
+    volumes:
+      - ./data:/data
+    # No ports: the bot only makes outbound IRC/HTTPS connections.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
