@@ -72,6 +72,9 @@ function onMessageHandler (target, context, msg, self) {
   }catch(e){
     console.log(`Could not execute dj command ${e}`);
   }
+  } else if(commandName === '!deez'){
+    client.say(target, `deez nuts`);
+    console.log(`* Executed ${commandName} command`);
   } else {
     console.log(`* Unknown command ${commandName}`);
   }
