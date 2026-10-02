@@ -22,17 +22,28 @@ function localMidnight(d = new Date()) {
   return m;
 }
 
-// set.json is wall-clock only ("15:00"), so anchor it to today.
+// set.json is wall-clock only ("15:00"), so it has to be anchored to a date.
+//
+// Anchor to yesterday as well as today: a set that starts at 23:00 runs past
+// midnight, and once the date rolls, today's anchoring puts it 24h in the
+// future - so a set still playing at 00:10 would read as "no set". The
+// yesterday-anchored copy covers that tail. Expired slots are dropped by
+// futureOnly, so the extra copies are invisible outside the overlap.
 function fromSetJson() {
   let set;
   try { set = require('./set.json'); } catch { return []; }
   if (!Array.isArray(set)) return [];
-  const base = localMidnight().getTime();
-  return set.map(s => {
-    const [h, m] = String(s.start).split(':').map(Number);
-    const start = new Date(base + (h * 60 + m) * 60000);
-    return { start, end: new Date(start.getTime() + (s.mins || 90) * 60000), dj: s.dj };
-  });
+  const today = localMidnight().getTime();
+  const DAY = 86400000;
+  const out = [];
+  for (const base of [today - DAY, today]) {
+    for (const s of set) {
+      const [h, m] = String(s.start).split(':').map(Number);
+      const start = new Date(base + (h * 60 + m) * 60000);
+      out.push({ start, end: new Date(start.getTime() + (s.mins || 90) * 60000), dj: s.dj });
+    }
+  }
+  return out.sort((a, b) => a.start - b.start);
 }
 
 async function fromDiscord() {
@@ -74,9 +85,24 @@ async function fromDiscord() {
 
 // Currently-running plus upcoming, so a lineup running past midnight still
 // reads correctly instead of being cut off by a calendar-day filter.
+//
+// Dedupes the set.json day-anchor overlap: between midnight and the end of a
+// set that began the previous evening, the same DJ appears twice (the slot
+// finishing now, and tonight's repeat of it). Keep the one in progress and drop
+// the later twin, so !set does not list the same name twice. Discord slots have
+// absolute timestamps and never collide this way.
 function futureOnly(slots) {
   const now = Date.now();
-  return slots.filter(s => s.end.getTime() > now).slice(0, MAX_SLOTS);
+  const live = slots.filter(s => s.end.getTime() > now);
+  const seen = new Set();
+  const out = [];
+  for (const s of live) {
+    const key = `${s.dj}@${s.start.getHours()}:${s.start.getMinutes()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out.slice(0, MAX_SLOTS);
 }
 
 async function getLineup() {
