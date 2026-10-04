@@ -1,6 +1,7 @@
 const tmi = require('tmi.js');
 const { getOpts } = require('./auth.js');
 const { getLineup, futureOnly } = require('./lineup.js');
+const { isLive } = require('./live.js');
 // import { REST, Routes } from 'discord.js';
 
 // Options are resolved asynchronously - token.js mints a fresh access token
@@ -25,25 +26,41 @@ function wire() {
     process.exit(1);
   }
 })();
+// Every outbound line goes through here: the bot only talks while the channel
+// is actually streaming. See live.js for the cached Helix check.
+async function say (target, message) {
+  if (!(await isLive(target))) {
+    console.log(`[live] suppressed while offline: ${String(message).split('\n')[0]}`);
+    return false;
+  }
+  client.say(target, message);
+  return true;
+}
+
 // Comands for the bot
 // Warms the lineup cache at startup and surfaces a bad Discord token in the
 // logs immediately, rather than on the first !set in chat.
 getSet().then(l => console.log(l)).catch(e => console.log(`[lineup] ${e.message}`));
 const sendCommands = async (data) => {
+  const channel = opts.channels[0];
   let date = new Date();
   const minutes = date.getMinutes();
+  // Nothing to announce into an offline channel - bail before doing any work
+  // (this is also what keeps the log quiet while the stream is down).
+  if (minutes !== 0 && minutes % 30 !== 0) return;
+  if (!(await isLive(channel))) return;
   console.log(`Checking current minute ${minutes}`);
   if(minutes === 0){
     try {
       const dj = await getDJ();
-      client.say(opts.channels[0], dj);
+      await say(channel, dj);
     } catch(e){
       console.log(e);
     }
-  } else if(minutes % 30 === 0){
+  } else {
     console.log(`Pasting commands for users to utilize`);
     try {
-      client.say(opts.channels[0], `To get the current dj type !dj`);
+      await say(channel, `To get the current dj type !dj`);
     }catch(e){
       console.log(e);
     }
@@ -62,23 +79,23 @@ async function onMessageHandler (target, context, msg, self) {
   if (commandName === '!dj') {
     try {
       const dj = await getDJ();
-      client.say(target, dj);
+      await say(target, dj);
       console.log(`* Executed ${commandName} command`);
     }catch(e){
       console.log(`Could not execute dj command ${e}`);
     }
   } else if(commandName === '!set'){
     try {
-    const setList = getSet();
-    client.say(target, setList);
+    const setList = await getSet();
+    await say(target, setList);
   }catch(e){
     console.log(`Could not execute dj command ${e}`);
   }
   } else if(commandName === '!deez'){
-    client.say(target, `deez nuts`);
+    await say(target, `deez nuts`);
     console.log(`* Executed ${commandName} command`);
   } else if(commandName === '!penis'){
-    client.say(target, `penis`);
+    await say(target, `penis`);
     console.log(`* Executed ${commandName} command`);
   } else {
     console.log(`* Unknown command ${commandName}`);
