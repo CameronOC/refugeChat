@@ -1,5 +1,8 @@
 [
-  { "start": "20:00", "mins": 90, "dj": "NullCase" },
-  { "start": "21:30", "mins": 90, "dj": "Medii" },
-  { "start": "23:00", "mins": 90, "dj": "TheLenzSeesAll" }
+  { "start": "15:00", "mins": 90, "dj": "Jobo Kobobo" },
+  { "start": "16:30", "mins": 90, "dj": "ThomaSmooth" },
+  { "start": "18:00", "mins": 90, "dj": "Sne k" },
+  { "start": "19:30", "mins": 90, "dj": "Gallius" },
+  { "start": "21:00", "mins": 90, "dj": "Moxxel" },
+  { "start": "22:30", "mins": 90, "dj": "M5E34" }
 ]

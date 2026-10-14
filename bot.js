@@ -33,7 +33,14 @@ async function say (target, message) {
     console.log(`[live] suppressed while offline: ${String(message).split('\n')[0]}`);
     return false;
   }
-  client.say(target, message);
+  // A dropped IRC socket rejects with "Not connected to server."; left
+  // unawaited, that rejection crashed the whole process.
+  try {
+    await client.say(target, message);
+  } catch (e) {
+    console.log(`[say] failed: ${e.message || e}`);
+    return false;
+  }
   return true;
 }
 
