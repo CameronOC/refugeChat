@@ -4,7 +4,7 @@
   "description": "Responds to refuge twitch chat",
   "main": "index.js",
   "scripts": {
-    "test": "test"
+    "test": "node --test"
   },
   "keywords": [
     "chatbot",
