@@ -5,7 +5,7 @@
 //
 // It prints exactly what !set would serve from Discord, or explains why the
 // bot would fall back to set.json instead. Nothing is sent to Twitch.
-const { fromDiscord, discordConfigured, futureOnly } = require('./lineup.js');
+const { fromDiscord, discordConfigured, futureOnly, currentEvent } = require('./lineup.js');
 
 (async () => {
   if (!discordConfigured()) {
@@ -25,7 +25,7 @@ const { fromDiscord, discordConfigured, futureOnly } = require('./lineup.js');
   for (const s of slots) {
     console.log(`  ${s.start.toLocaleString()} -> ${s.end.toLocaleString()}  ${s.dj}`);
   }
-  const up = futureOnly(slots);
-  console.log(`\n!set would list ${up.length} current/upcoming slot(s)${up.length ? ':' : '. The bot would fall back to set.json.'}`);
+  const up = currentEvent(futureOnly(slots));
+  console.log(`\n!set would list ${up.length} slot(s)${up[0] && up[0].eventName ? ` for "${up[0].eventName}"` : ""}${up.length ? ':' : '. The bot would fall back to set.json.'}`);
   for (const s of up) console.log(`  ${s.start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} ${s.dj}`);
 })();
