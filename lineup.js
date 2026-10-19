@@ -63,6 +63,7 @@ function fromSetJson() {
 
 const TS_RE = /<t:(\d{9,11})(?::[tTdDfFR])?>/g;
 // 3, 3:00, 3.00, 3pm, 3:00pm, 3:00 p.m., 15:00, 1500h is deliberately NOT matched.
+const DURATION_RE = /\(\s*(\d+(?:\.\d+)?)\s*(min(?:ute)?s?|h(?:ou)?rs?|h)\s*\+?\s*\)/i;
 const TIME_RE = /\b(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?(?=[\s\-–—:,|)]|$)/gi;
 
 function stripMarkdown(t) {
@@ -151,10 +152,22 @@ function parseDescription(desc, eventStart, eventEnd) {
       }
     }
 
-    const dj = cleanName(line);
+    // "(90 min)", "(60 min)", "(2 hour+)", "(1.5 hrs)" after the name is the
+    // slot length. Other parentheticals ("(live hardware)") stay in the name.
+    let mins = null;
+    line = line.replace(DURATION_RE, (_, n, unit) => {
+      const v = Number(n);
+      mins = /^h/i.test(unit) ? Math.round(v * 60) : Math.round(v);
+      return ' ';
+    });
+
+    let dj = cleanName(line);
     if (!dj) continue;
+    // Unfilled weeks are posted with the slot number as the name.
+    if (/^\d+$/.test(dj)) dj = 'TBA';
     const start = times[0];
-    const end = times[1] && times[1] > start ? times[1] : null;
+    let end = times[1] && times[1] > start ? times[1] : null;
+    if (!end && mins) end = new Date(start.getTime() + mins * 60000);
     slots.push({ start, end, dj });
     floor = start.getTime();
   }
@@ -204,10 +217,11 @@ async function fromDiscord() {
     const end = e.scheduled_end_time ? new Date(e.scheduled_end_time) : null;
 
     const parsed = parseDescription(e.description, start, end);
+    const tag = { event: e.id, eventName: (e.name || '').trim() };
     if (parsed.length) {
-      slots.push(...parsed);
-    } else if ((e.name || '').trim()) {
-      slots.push({ start, end: end && !isNaN(end) ? end : null, dj: e.name.trim() });
+      slots.push(...parsed.map(p => Object.assign(p, tag)));
+    } else if (tag.eventName) {
+      slots.push({ start, end: end && !isNaN(end) ? end : null, dj: tag.eventName, ...tag });
     }
   }
   slots.sort((a, b) => a.start - b.start);
@@ -245,6 +259,15 @@ function futureOnly(slots) {
   return out.slice(0, MAX_SLOTS);
 }
 
+// The guild lists weeks of events at once. !set is about tonight: keep only
+// the slots belonging to the event the first current/upcoming slot came from.
+// set.json slots carry no event tag and pass through untouched.
+function currentEvent(slots) {
+  if (!slots.length || !slots[0].event) return slots;
+  const id = slots[0].event;
+  return slots.filter(s => s.event === id);
+}
+
 async function getLineup() {
   if (cache.slots && Date.now() - cache.at < TTL_MS) return cache;
 
@@ -279,4 +302,4 @@ async function getLineup() {
   return cache;
 }
 
-module.exports = { getLineup, futureOnly, fromSetJson, fromDiscord, discordConfigured, parseDescription };
+module.exports = { getLineup, futureOnly, currentEvent, fromSetJson, fromDiscord, discordConfigured, parseDescription };

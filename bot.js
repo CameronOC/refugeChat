@@ -1,6 +1,6 @@
 const tmi = require('tmi.js');
 const { getOpts } = require('./auth.js');
-const { getLineup, futureOnly } = require('./lineup.js');
+const { getLineup, futureOnly, currentEvent } = require('./lineup.js');
 const { isLive } = require('./live.js');
 // import { REST, Routes } from 'discord.js';
 
@@ -131,9 +131,13 @@ async function getDJ () {
 // Function called when the "set" command is issued
 async function getSet () {
   const { slots, source } = await getLineup();
-  const upcoming = futureOnly(slots);
+  const upcoming = currentEvent(futureOnly(slots));
   if(!upcoming.length) return `No lineup set`;
-  let setList = `Lineup: (times are in YOUR TIMEZONE)`;
+  // Twitch cannot localise times per viewer the way Discord's <t:> markup
+  // does, so say which zone these are (TZ from docker-compose.yml).
+  const zone = new Date().toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
+  const title = upcoming[0].eventName ? `${upcoming[0].eventName} lineup` : 'Lineup';
+  let setList = `${title} (times in ${zone}):`;
   for(const s of upcoming){
     setList += `
     ${fmtTime(s.start)} ${s.dj} (${slotMins(s)} min)`;

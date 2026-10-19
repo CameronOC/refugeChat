@@ -91,3 +91,44 @@ test('empty or timeless description yields nothing', () => {
   assert.deepEqual(parseDescription(null, start, end), []);
   assert.deepEqual(parseDescription('just vibes, no schedule', start, end), []);
 });
+
+const { currentEvent, futureOnly } = require('./lineup.js');
+
+test('real Refuge format: <t:> timestamps, durations, live hardware, TBA placeholders', () => {
+  const t0 = Math.floor(new Date(2026, 9, 21, 15, 0).getTime() / 1000);
+  const evStart = new Date(2026, 9, 21, 3, 0), evEnd = new Date(2026, 9, 22, 1, 0);
+  const s = parseDescription(`### Refuge 205
+
+Welcome all refugees to Wednesday house night!
+
+**Lineup: (times are in YOUR TIMEZONE)**
+<t:${t0}:t> Mackamora (90 min)
+<t:${t0 + 5400}:t> MUNKS (60 min) (live hardware)
+<t:${t0 + 9000}:t> Juoto (2 hour+) (live hardware)
+<t:${t0 + 16200}:t> 4 (90 min)
+
+Open decks after as always.
+
+**Join the VRChat group to join the event:**
+<https://vrc.group/REFUGE.2009>
+
+<https://refugevr.co>`, evStart, evEnd);
+  assert.deepEqual(names(s), ['Mackamora', 'MUNKS (live hardware)', 'Juoto (live hardware)', 'TBA']);
+  assert.deepEqual(starts(s), ['15:00', '16:30', '17:30', '19:30']);
+  assert.deepEqual(s.map(x => (x.end - x.start) / 60000), [90, 60, 120, 90]);
+});
+
+test('currentEvent keeps only the first event once past slots are dropped', () => {
+  const now = Date.now(), H = 3600000;
+  const mk = (off, dj, event) => ({ start: new Date(now + off * H), end: new Date(now + (off + 1.5) * H), dj, event });
+  const slots = [
+    mk(-3, 'done', 'A'), mk(-1, 'playing', 'A'), mk(0.5, 'next', 'A'),
+    mk(24, 'tomorrow1', 'B'), mk(25.5, 'tomorrow2', 'B'),
+  ];
+  assert.deepEqual(names(currentEvent(futureOnly(slots))), ['playing', 'next']);
+  // Nothing left tonight: tomorrow's event is what is up next.
+  assert.deepEqual(names(currentEvent(futureOnly(slots.slice(3)))), ['tomorrow1', 'tomorrow2']);
+  // set.json slots have no event tag and pass through.
+  const plain = [mk(0.5, 'x'), mk(2, 'y')].map(({ event, ...r }) => r);
+  assert.equal(currentEvent(plain).length, 2);
+});
