@@ -208,6 +208,7 @@ async function fromDiscord() {
     : null;
 
   const slots = [];
+  const meta = [];
   for (const e of events) {
     if (e.status === CANCELED || e.status === COMPLETED) continue;
     if (!e.scheduled_start_time) continue;
@@ -223,8 +224,20 @@ async function fromDiscord() {
     } else if (tag.eventName) {
       slots.push({ start, end: end && !isNaN(end) ? end : null, dj: tag.eventName, ...tag });
     }
+    meta.push({
+      id: e.id,
+      name: tag.eventName,
+      start,
+      end: end && !isNaN(end) ? end : null,
+      // The lineup's first slot is when the music starts; the Discord event
+      // itself often opens hours earlier.
+      firstSet: parsed.length ? parsed[0].start : start,
+      blurb: summarize(e.description),
+      links: extractLinks(e.description)
+    });
   }
   slots.sort((a, b) => a.start - b.start);
+  meta.sort((a, b) => a.start - b.start);
 
   // Discord allows a null end time. Infer it from the next slot's start, and
   // fall back to 90 minutes for the last one.
@@ -234,7 +247,32 @@ async function fromDiscord() {
       slots[i].end = next ? new Date(next.start) : new Date(slots[i].start.getTime() + 90 * 60000);
     }
   }
-  return slots;
+  return { slots, events: meta };
+}
+
+// First plain sentence of the description: skips headings, the lineup block,
+// bare links and section labels. "Welcome all refugees to Wednesday house
+// night!" is what we want out of a Refuge post.
+function summarize(desc) {
+  if (!desc) return '';
+  for (const raw of desc.split(/\r?\n/)) {
+    if (/^\s*#/.test(raw)) continue;
+    if (/<t:\d+/.test(raw) || /https?:\/\//i.test(raw)) continue;
+    const line = stripMarkdown(raw).trim();
+    if (!line) continue;
+    if (/^lineup\b/i.test(line) || /^join the/i.test(line) || /^open decks/i.test(line)) continue;
+    if (TIME_RE.test(line)) { TIME_RE.lastIndex = 0; continue; }
+    TIME_RE.lastIndex = 0;
+    return line.slice(0, 200);
+  }
+  return '';
+}
+
+function extractLinks(desc) {
+  if (!desc) return [];
+  const out = [];
+  for (const m of desc.matchAll(/https?:\/\/[^\s<>)]+/gi)) out.push(m[0]);
+  return [...new Set(out)];
 }
 
 // Currently-running plus upcoming, so a lineup running past midnight still
@@ -245,8 +283,7 @@ async function fromDiscord() {
 // finishing now, and tonight's repeat of it). Keep the one in progress and drop
 // the later twin, so !set does not list the same name twice. Discord slots have
 // absolute timestamps and never collide this way.
-function futureOnly(slots) {
-  const now = Date.now();
+function futureOnly(slots, now = Date.now()) {
   const live = slots.filter(s => s.end.getTime() > now);
   const seen = new Set();
   const out = [];
@@ -272,6 +309,7 @@ async function getLineup() {
   if (cache.slots && Date.now() - cache.at < TTL_MS) return cache;
 
   let slots = null;
+  let events = [];
   let source = 'set.json';
   if (!discordConfigured()) {
     // Say so once, loudly: this fallback ran silently in production for weeks
@@ -282,9 +320,11 @@ async function getLineup() {
     }
   } else {
     try {
-      slots = await fromDiscord();
+      const got = await fromDiscord();
+      slots = got ? got.slots : null;
       if (slots && slots.length) {
         source = 'discord';
+        events = got.events;
       } else {
         // Reachable but empty: nobody has created the events yet. Keep the
         // hand-maintained file as a safety net rather than announcing no lineup.
@@ -298,8 +338,8 @@ async function getLineup() {
   }
   if (!slots) slots = fromSetJson();
 
-  cache = { at: Date.now(), slots, source };
+  cache = { at: Date.now(), slots, events, source };
   return cache;
 }
 
-module.exports = { getLineup, futureOnly, currentEvent, fromSetJson, fromDiscord, discordConfigured, parseDescription };
+module.exports = { getLineup, futureOnly, currentEvent, fromSetJson, fromDiscord, discordConfigured, parseDescription, summarize, extractLinks };

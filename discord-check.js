@@ -13,15 +13,17 @@ const { fromDiscord, discordConfigured, futureOnly, currentEvent } = require('./
     console.log('Fill both in .env (see the comments there), then rerun this check.');
     process.exit(2);
   }
-  let slots;
+  let slots, events;
   try {
-    slots = await fromDiscord();
+    ({ slots, events } = await fromDiscord());
   } catch (e) {
     console.log(`Discord fetch FAILED: ${e.message}`);
     console.log('401 = bad token. 403/50001 = bot is not in the server, or lacks View Channels. 404 = wrong guild id.');
     process.exit(1);
   }
-  console.log(`Discord returned ${slots.length} usable scheduled event(s):`);
+  console.log(`Discord returned ${events.length} event(s), ${slots.length} slot(s):`);
+  for (const e of events) console.log(`  [${e.name}] ${e.firstSet.toLocaleString()} - ${e.blurb || '(no blurb)'} ${e.links.join(' ')}`);
+  console.log('');
   for (const s of slots) {
     console.log(`  ${s.start.toLocaleString()} -> ${s.end.toLocaleString()}  ${s.dj}`);
   }

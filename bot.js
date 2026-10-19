@@ -1,6 +1,7 @@
 const tmi = require('tmi.js');
 const { getOpts } = require('./auth.js');
-const { getLineup, futureOnly, currentEvent } = require('./lineup.js');
+const { getLineup } = require('./lineup.js');
+const commands = require('./commands.js');
 const { isLive } = require('./live.js');
 // import { REST, Routes } from 'discord.js';
 
@@ -44,10 +45,17 @@ async function say (target, message) {
   return true;
 }
 
-// Comands for the bot
+// Commands live in commands.js; this file only wires them to Twitch.
 // Warms the lineup cache at startup and surfaces a bad Discord token in the
 // logs immediately, rather than on the first !set in chat.
-getSet().then(l => console.log(l)).catch(e => console.log(`[lineup] ${e.message}`));
+setMsgFor().then(l => console.log(l)).catch(e => console.log(`[lineup] ${e.message}`));
+async function setMsgFor () {
+  const { slots, source } = await getLineup();
+  console.log(`[lineup] served from ${source}`);
+  return commands.setMsg(slots);
+}
+
+let tipIndex = 0;
 const sendCommands = async (data) => {
   const channel = opts.channels[0];
   let date = new Date();
@@ -59,92 +67,55 @@ const sendCommands = async (data) => {
   console.log(`Checking current minute ${minutes}`);
   if(minutes === 0){
     try {
-      const dj = await getDJ();
-      await say(channel, dj);
+      const { slots } = await getLineup();
+      await say(channel, commands.djMsg(slots));
     } catch(e){
       console.log(e);
     }
   } else {
-    console.log(`Pasting commands for users to utilize`);
+    const tip = commands.TIPS[tipIndex++ % commands.TIPS.length];
+    console.log(`Posting tip: ${tip}`);
     try {
-      await say(channel, `To get the current dj type !dj`);
+      await say(channel, tip);
     }catch(e){
       console.log(e);
     }
   }
 };
 
+// `${channel} ${command}` -> epoch ms the cooldown ends.
+const cooldowns = new Map();
+
 // Called every time a message comes in
 async function onMessageHandler (target, context, msg, self) {
   if (self) { return; } // Ignore messages from the bot
 
-  // Remove whitespace from chat message
-  const commandName = msg.trim();
-  console.log(commandName);
+  const text = msg.trim();
+  console.log(text);
+  const parsed = commands.parse(text);
+  if (!parsed) return;
+  const cmd = commands.COMMANDS[parsed.name];
+  if (!cmd) {
+    console.log(`* Unknown command ${parsed.name}`);
+    return;
+  }
 
-  // If the command is known, let's execute it
-  if (commandName === '!dj') {
-    try {
-      const dj = await getDJ();
-      await say(target, dj);
-      console.log(`* Executed ${commandName} command`);
-    }catch(e){
-      console.log(`Could not execute dj command ${e}`);
+  const key = `${target} ${parsed.name}`;
+  const until = cooldowns.get(key) || 0;
+  if (Date.now() < until) {
+    console.log(`* ${parsed.name} on cooldown for ${Math.ceil((until - Date.now()) / 1000)}s`);
+    return;
+  }
+
+  try {
+    const reply = await cmd.run(parsed.args, context);
+    if (reply && await say(target, reply)) {
+      cooldowns.set(key, Date.now() + (cmd.cooldown || 0) * 1000);
+      console.log(`* Executed ${parsed.name}`);
     }
-  } else if(commandName === '!set'){
-    try {
-    const setList = await getSet();
-    await say(target, setList);
-  }catch(e){
-    console.log(`Could not execute dj command ${e}`);
+  } catch(e){
+    console.log(`Could not execute ${parsed.name}: ${e}`);
   }
-  } else if(commandName === '!deez'){
-    await say(target, `deez nuts`);
-    console.log(`* Executed ${commandName} command`);
-  } else if(commandName === '!penis'){
-    await say(target, `penis`);
-    console.log(`* Executed ${commandName} command`);
-  } else {
-    console.log(`* Unknown command ${commandName}`);
-  }
-}
-
-// Slots carry real Date objects, so formatting is all that is left here.
-// 15:00 -> "3:00 PM", in the host timezone (TZ is set in docker-compose.yml).
-function fmtTime (d) {
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-}
-
-function slotMins (s) {
-  return Math.round((s.end.getTime() - s.start.getTime()) / 60000);
-}
-
-// Function called when the "dj" command is issued
-async function getDJ () {
-  const { slots } = await getLineup();
-  const now = Date.now();
-  const slot = slots.find(s => now >= s.start.getTime() && now < s.end.getTime());
-  if(!slot) return `No set on right now`;
-  return `The current DJ is: ${slot.dj}`
-}
-
-// Function called when the "set" command is issued
-async function getSet () {
-  const { slots, source } = await getLineup();
-  const upcoming = currentEvent(futureOnly(slots));
-  if(!upcoming.length) return `No lineup set`;
-  // Twitch cannot localise times per viewer the way Discord's <t:> markup
-  // does, so say which zone these are (TZ from docker-compose.yml).
-  const zone = new Date().toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
-  const title = upcoming[0].eventName ? `${upcoming[0].eventName} lineup` : 'Lineup';
-  let setList = `${title} (times in ${zone}):`;
-  for(const s of upcoming){
-    setList += `
-    ${fmtTime(s.start)} ${s.dj} (${slotMins(s)} min)`;
-  }
-
-  console.log(`[lineup] served from ${source}`);
-  return setList;
 }
 
 // Called every time the bot connects to Twitch chat
