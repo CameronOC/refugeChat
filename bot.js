@@ -1,5 +1,6 @@
 const tmi = require('tmi.js');
 const { getOpts } = require('./auth.js');
+const { refresh } = require('./token.js');
 const { getLineup } = require('./lineup.js');
 const commands = require('./commands.js');
 const { isLive } = require('./live.js');
@@ -13,6 +14,34 @@ let client;
 function wire() {
   client.on('message', onMessageHandler);
   client.on('connected', onConnectedHandler);
+  client.on('disconnected', onDisconnectedHandler);
+}
+
+// tmi.js retries dropped sockets itself, but a failed login sets
+// client.reconnect = false and it gives up for good. Take over in that case:
+// force-mint a new token (the cached one may have been revoked early) and
+// keep retrying with backoff until chat accepts us again.
+let retryMs = 5000;
+let retrying = false;
+function onDisconnectedHandler (reason) {
+  console.log(`[irc] disconnected: ${reason}`);
+  if (client.reconnect || retrying) return; // tmi.js is handling it
+  retrying = true;
+  console.log(`[irc] tmi.js gave up; retrying in ${retryMs / 1000}s with a fresh token`);
+  setTimeout(async () => {
+    try {
+      await refresh();
+      client.reconnect = true;
+      await client.connect();
+      retryMs = 5000;
+    } catch (e) {
+      console.log(`[irc] reconnect failed: ${e.message || e}`);
+      retryMs = Math.min(retryMs * 2, 5 * 60000);
+    } finally {
+      retrying = false;
+      if (client.readyState() !== 'OPEN') onDisconnectedHandler('retry');
+    }
+  }, retryMs);
 }
 
 // Connect to Twitch:
@@ -121,6 +150,9 @@ async function onMessageHandler (target, context, msg, self) {
 // Called every time the bot connects to Twitch chat
 function onConnectedHandler (addr, port) {
   console.log(`* Connected to ${addr}:${port}`);
+  // Runs on every reconnect too; only ever start one tip timer.
+  if (tipTimer) return;
   console.log(`Beginning send Commands info for twitch enjoyers`);
-  setInterval(sendCommands, 60000);
+  tipTimer = setInterval(sendCommands, 60000);
 }
+let tipTimer = null;

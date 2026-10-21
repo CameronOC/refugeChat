@@ -3,11 +3,15 @@
 const { getAccessToken } = require('./token.js');
 
 async function getOpts() {
-  const token = await getAccessToken();
+  await getAccessToken(); // fail fast at startup if the refresh token is bad
   return {
+    connection: { reconnect: true, secure: true },
     identity: {
       username: process.env.TWITCH_USER || 'refugechat',
-      password: `oauth:${token}`
+      // A function, not a string: tmi.js calls it on every (re)connect, so a
+      // reconnect hours after startup sends a current token instead of the
+      // expired one the bot launched with.
+      password: async () => `oauth:${await getAccessToken()}`
     },
     channels: (process.env.TWITCH_CHANNELS || 'refugevr').split(',').map(s => s.trim())
   };
