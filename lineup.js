@@ -233,7 +233,9 @@ async function fromDiscord() {
       // itself often opens hours earlier.
       firstSet: parsed.length ? parsed[0].start : start,
       blurb: summarize(e.description),
-      links: extractLinks(e.description)
+      links: extractLinks(e.description),
+      // "Open decks after as always." - absent on curated nights like Abyss.
+      openDecks: /open\s*decks/i.test(e.description || '')
     });
   }
   slots.sort((a, b) => a.start - b.start);

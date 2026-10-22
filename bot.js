@@ -67,8 +67,8 @@ const sendCommands = async (data) => {
   console.log(`Checking current minute ${minutes}`);
   if(minutes === 0){
     try {
-      const { slots } = await getLineup();
-      await say(channel, commands.djMsg(slots));
+      const { slots, events } = await getLineup();
+      await say(channel, commands.djMsg(slots, Date.now(), events));
     } catch(e){
       console.log(e);
     }

@@ -21,13 +21,23 @@ const slots = [...tonight, ...tomorrow];
 const events = [
   { id: 'A', name: 'Refuge 205', start: at(21, 3), end: at(22, 1), firstSet: at(21, 15),
     blurb: 'Welcome all refugees to Wednesday house night!',
-    links: ['https://vrc.group/REFUGE.2009', 'https://refugevr.co'] },
+    links: ['https://vrc.group/REFUGE.2009', 'https://refugevr.co'], openDecks: true },
   { id: 'B', name: 'Waiting Room', start: at(22, 20), end: at(23, 1), firstSet: at(22, 20), blurb: '', links: [] },
 ];
 
-test('!dj', () => {
-  assert.equal(C.djMsg(slots, NOW), 'The current DJ is: EQNX');
-  assert.equal(C.djMsg(slots, at(21, 20, 0).getTime()), 'No set on right now');
+test('!dj: current DJ, open decks in a gap and after the last set, curated nights excepted', () => {
+  assert.equal(C.djMsg(slots, NOW, events), 'The current DJ is: EQNX');
+  // Gap between apl and Lavy.
+  assert.equal(C.djMsg(slots, at(21, 20, 0).getTime(), events),
+    'Open decks right now, anyone can hop on! Next set: Lavy at 10:30 PM');
+  // After the last set.
+  assert.equal(C.djMsg(slots, at(22, 0, 30).getTime(), events), 'Open decks right now, anyone can hop on!');
+  // set.json fallback has no event metadata: still open decks.
+  assert.equal(C.djMsg(tonight.map(({ event, eventName, ...r }) => r), at(22, 0, 30).getTime()),
+    'Open decks right now, anyone can hop on!');
+  // An event whose description never mentions open decks.
+  const curated = events.map(e => e.id === 'A' ? { ...e, openDecks: false } : e);
+  assert.equal(C.djMsg(slots, at(21, 20, 0).getTime(), curated), 'No set on right now. Next set: Lavy at 10:30 PM');
 });
 
 test('!next during a set, during a gap, and at the last set', () => {

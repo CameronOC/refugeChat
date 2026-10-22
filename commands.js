@@ -29,10 +29,22 @@ function current (slots, now) {
 
 // --- message builders -------------------------------------------------------
 
-function djMsg (slots, now = Date.now()) {
+// With no set on, it is open decks (unless tonight's event says otherwise),
+// and we point at the next scheduled set if there is one tonight.
+function djMsg (slots, now = Date.now(), events = []) {
   const slot = current(slots, now);
-  if (!slot) return 'No set on right now';
-  return `The current DJ is: ${slot.dj}`;
+  if (slot) return `The current DJ is: ${slot.dj}`;
+
+  // Tonight's event is the one whose window contains now; the next set only
+  // counts if it belongs to it, so after the last set we do not advertise
+  // tomorrow's opener as "next".
+  const ev = events.find(e => e.start.getTime() <= now && e.end && e.end.getTime() > now);
+  const upcoming = futureOnly(slots, now);
+  const scope = ev ? upcoming.filter(s => s.event === ev.id) : upcoming;
+  const next = scope.find(s => s.start.getTime() > now);
+  const open = ev ? ev.openDecks : true;
+  const tail = next ? ` Next set: ${next.dj} at ${fmtWhen(next.start, now)}` : '';
+  return open ? `Open decks right now, anyone can hop on!${tail}` : `No set on right now.${tail}`;
 }
 
 function setMsg (slots, now = Date.now()) {
@@ -101,7 +113,7 @@ function vrcMsg (lineup) {
 // chat spamming !vrc does not eat the bot's 20-messages-per-30s budget.
 
 const COMMANDS = {
-  '!dj':       { cooldown: 5,  help: 'who is playing now',           run: async () => djMsg((await getLineup()).slots) },
+  '!dj':       { cooldown: 5,  help: 'who is playing now',           run: async () => { const l = await getLineup(); return djMsg(l.slots, Date.now(), l.events); } },
   '!next':     { cooldown: 5,  help: 'who is on after this set',     run: async () => nextMsg((await getLineup()).slots) },
   '!timeleft': { cooldown: 5,  help: 'time left in the current set', run: async () => timeleftMsg((await getLineup()).slots) },
   '!set':      { cooldown: 10, help: 'tonight\'s full lineup',        run: async () => setMsg((await getLineup()).slots) },
