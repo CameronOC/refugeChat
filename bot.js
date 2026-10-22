@@ -102,9 +102,11 @@ const sendCommands = async (data) => {
       console.log(e);
     }
   } else {
-    const tip = commands.TIPS[tipIndex++ % commands.TIPS.length];
-    console.log(`Posting tip: ${tip}`);
     try {
+      const { slots } = await getLineup();
+      const tip = commands.pickTip(tipIndex++, slots);
+      if (!tip) return;
+      console.log(`Posting tip: ${tip}`);
       await say(channel, tip);
     }catch(e){
       console.log(e);

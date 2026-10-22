@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const C = require('./commands.js');
+const Z = new Date().toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
 const { summarize, extractLinks } = require('./lineup.js');
 
 // Fixed clock: Wed 2026-10-21 16:50 local. Refuge 205 runs 3:00 PM - 12:00 AM.
@@ -29,7 +30,7 @@ test('!dj: current DJ, open decks in a gap and after the last set, curated night
   assert.equal(C.djMsg(slots, NOW, events), 'The current DJ is: EQNX');
   // Gap between apl and Lavy.
   assert.equal(C.djMsg(slots, at(21, 20, 0).getTime(), events),
-    'Open decks right now, anyone can hop on! Next set: Lavy at 10:30 PM');
+    `Open decks right now, anyone can hop on! Next set: Lavy at 10:30 PM ${Z}`);
   // After the last set.
   assert.equal(C.djMsg(slots, at(22, 0, 30).getTime(), events), 'Open decks right now, anyone can hop on!');
   // set.json fallback has no event metadata: still open decks.
@@ -37,13 +38,13 @@ test('!dj: current DJ, open decks in a gap and after the last set, curated night
     'Open decks right now, anyone can hop on!');
   // An event whose description never mentions open decks.
   const curated = events.map(e => e.id === 'A' ? { ...e, openDecks: false } : e);
-  assert.equal(C.djMsg(slots, at(21, 20, 0).getTime(), curated), 'No set on right now. Next set: Lavy at 10:30 PM');
+  assert.equal(C.djMsg(slots, at(21, 20, 0).getTime(), curated), `No set on right now. Next set: Lavy at 10:30 PM ${Z}`);
 });
 
 test('!next during a set, during a gap, and at the last set', () => {
-  assert.equal(C.nextMsg(slots, NOW), 'EQNX is on now. Up next: apl at 6:00 PM (in 70 min)');
-  assert.equal(C.nextMsg(slots, at(21, 20, 0).getTime()), 'Up next: Lavy at 10:30 PM (in 150 min)');
-  assert.equal(C.nextMsg(slots, at(21, 23, 0).getTime()), 'Lavy is the last set tonight. Next event: Waiting Room, Thu 8:00 PM');
+  assert.equal(C.nextMsg(slots, NOW), `EQNX is on now. Up next: apl at 6:00 PM ${Z} (in 70 min)`);
+  assert.equal(C.nextMsg(slots, at(21, 20, 0).getTime()), `Up next: Lavy at 10:30 PM ${Z} (in 150 min)`);
+  assert.equal(C.nextMsg(slots, at(21, 23, 0).getTime()), `Lavy is the last set tonight. Next event: Waiting Room, Thu 8:00 PM ${Z}`);
   assert.equal(C.nextMsg(tonight, at(21, 23, 0).getTime()), 'Lavy is the last set tonight');
   assert.equal(C.nextMsg([], NOW), 'No upcoming sets');
 });
@@ -52,7 +53,7 @@ test('!timeleft', () => {
   assert.equal(C.timeleftMsg(slots, NOW), 'EQNX has 70 min left, then apl');
   assert.equal(C.timeleftMsg(slots, at(21, 23, 0).getTime()), 'Lavy has 60 min left');
   // No set on: falls through to !next so the answer is still useful.
-  assert.equal(C.timeleftMsg(slots, at(21, 20, 0).getTime()), 'Up next: Lavy at 10:30 PM (in 150 min)');
+  assert.equal(C.timeleftMsg(slots, at(21, 20, 0).getTime()), `Up next: Lavy at 10:30 PM ${Z} (in 150 min)`);
 });
 
 test('!set is scoped to tonight and titled', () => {
@@ -98,4 +99,16 @@ test('summarize and extractLinks on a real description', () => {
   assert.deepEqual(extractLinks(d), ['https://vrc.group/REFUGE.2009', 'https://refugevr.co']);
   assert.equal(summarize("### Broken\n\nA broken beat focused event. Expect jungle/breaks.\n"), 'A broken beat focused event. Expect jungle/breaks.');
   assert.equal(summarize(''), '');
+});
+
+test('half-hour tips skip the !dj pointer during open decks', () => {
+  const during = [0, 1, 2, 3].map(i => C.pickTip(i, slots, NOW));
+  assert.equal(during[0], 'Who is playing? Type !dj. Who is next? Type !next');
+  assert.equal(new Set(during).size, 4, 'all four tips rotate while a set is on');
+
+  const gap = at(21, 20, 0).getTime();
+  const open = [0, 1, 2, 3, 4, 5].map(i => C.pickTip(i, slots, gap));
+  assert.ok(open.every(tip => !/!dj/.test(tip)), 'no tip mentions !dj during open decks');
+  assert.equal(new Set(open).size, 3, 'the other three still rotate');
+  assert.equal(C.pickTip(0, [], NOW), 'Type !set for tonight\'s full lineup, or !event for what tonight is about');
 });

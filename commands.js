@@ -43,7 +43,7 @@ function djMsg (slots, now = Date.now(), events = []) {
   const scope = ev ? upcoming.filter(s => s.event === ev.id) : upcoming;
   const next = scope.find(s => s.start.getTime() > now);
   const open = ev ? ev.openDecks : true;
-  const tail = next ? ` Next set: ${next.dj} at ${fmtWhen(next.start, now)}` : '';
+  const tail = next ? ` Next set: ${next.dj} at ${fmtWhen(next.start, now)} ${zone()}` : '';
   return open ? `Open decks right now, anyone can hop on!${tail}` : `No set on right now.${tail}`;
 }
 
@@ -65,12 +65,12 @@ function nextMsg (slots, now = Date.now()) {
   const next = tonight.find(s => s.start.getTime() > now);
   if (next) {
     const lead = cur ? `${cur.dj} is on now. ` : '';
-    return `${lead}Up next: ${next.dj} at ${fmtWhen(next.start, now)} (in ${minsUntil(next.start, now)} min)`;
+    return `${lead}Up next: ${next.dj} at ${fmtWhen(next.start, now)} ${zone()} (in ${minsUntil(next.start, now)} min)`;
   }
   // Nothing more in this event: point at the next one if there is one.
   const later = upcoming.find(s => cur ? s.event !== cur.event && s.start.getTime() > now : s.start.getTime() > now);
   if (cur && later) {
-    return `${cur.dj} is the last set tonight. Next event: ${later.eventName || later.dj}, ${fmtWhen(later.start, now)}`;
+    return `${cur.dj} is the last set tonight. Next event: ${later.eventName || later.dj}, ${fmtWhen(later.start, now)} ${zone()}`;
   }
   if (cur) return `${cur.dj} is the last set tonight`;
   return 'No upcoming sets';
@@ -140,12 +140,21 @@ function commandsMsg () {
 }
 
 // Rotated into chat on the half hour instead of the old fixed "type !dj".
+// needsSet: only worth posting while a scheduled DJ is on. During open decks
+// the bot does not know who is playing, so pointing people at !dj is noise.
 const TIPS = [
-  'Who is playing? Type !dj. Who is next? Type !next',
-  'Type !set for tonight\'s full lineup, or !event for what tonight is about',
-  'Want in? Type !vrc for the VRChat group link',
-  'Type !commands to see everything this bot answers',
+  { text: 'Who is playing? Type !dj. Who is next? Type !next', needsSet: true },
+  { text: 'Type !set for tonight\'s full lineup, or !event for what tonight is about' },
+  { text: 'Want in? Type !vrc for the VRChat group link' },
+  { text: 'Type !commands to see everything this bot answers' },
 ];
+
+// The i-th tip in rotation, skipping ones that need a set when none is on.
+function pickTip (i, slots, now = Date.now()) {
+  const pool = TIPS.filter(t => !t.needsSet || current(slots, now));
+  if (!pool.length) return null;
+  return pool[((i % pool.length) + pool.length) % pool.length].text;
+}
 
 // Parse a chat line into { name, args }. Only the first word is the command,
 // so "!dj please" still works.
@@ -156,7 +165,7 @@ function parse (msg) {
 }
 
 module.exports = {
-  COMMANDS, TIPS, parse, commandsMsg,
+  COMMANDS, TIPS, pickTip, current, parse, commandsMsg,
   djMsg, setMsg, nextMsg, timeleftMsg, eventMsg, vrcMsg,
   fmtTime, fmtWhen, slotMins
 };
