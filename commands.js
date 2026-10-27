@@ -5,14 +5,21 @@ const { getLineup, futureOnly, currentEvent } = require('./lineup.js');
 const VRC_URL = process.env.VRC_GROUP_URL || 'https://vrc.group/REFUGE.2009';
 const SITE_URL = process.env.SITE_URL || 'https://refugevr.co';
 
-// 15:00 -> "3:00 PM", in the host timezone (TZ is set in docker-compose.yml).
-function fmtTime (d) {
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+// Chat sees times in DISPLAY_TZ (Eastern by default), whatever zone the host
+// runs in. Parsing still uses the host TZ: set.json wall-clock times are
+// Pacific, so the container keeps TZ=America/Los_Angeles.
+function displayTz () {
+  return process.env.DISPLAY_TZ || 'America/New_York';
 }
-// Another day -> "Thu 8:00 PM".
+// 15:00 PT -> "6:00 PM".
+function fmtTime (d) {
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: displayTz() });
+}
+// Another day (in the display zone) -> "Thu 8:00 PM".
 function fmtWhen (d, now = Date.now()) {
-  const sameDay = new Date(d).toDateString() === new Date(now).toDateString();
-  return sameDay ? fmtTime(d) : `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${fmtTime(d)}`;
+  const day = x => new Date(x).toLocaleDateString('en-US', { timeZone: displayTz() });
+  const sameDay = day(d) === day(now);
+  return sameDay ? fmtTime(d) : `${d.toLocaleDateString('en-US', { weekday: 'short', timeZone: displayTz() })} ${fmtTime(d)}`;
 }
 function slotMins (s) {
   return Math.round((s.end.getTime() - s.start.getTime()) / 60000);
@@ -21,7 +28,7 @@ function minsUntil (d, now) {
   return Math.max(0, Math.round((d.getTime() - now) / 60000));
 }
 function zone () {
-  return new Date().toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
+  return new Date().toLocaleTimeString('en-US', { timeZoneName: 'short', timeZone: displayTz() }).split(' ').pop();
 }
 function current (slots, now) {
   return slots.find(s => now >= s.start.getTime() && now < s.end.getTime());
@@ -90,7 +97,7 @@ function eventMsg (lineup, now = Date.now()) {
   const upcoming = currentEvent(futureOnly(slots, now));
   const ev = upcoming.length ? events.find(e => e.id === upcoming[0].event) : events.find(e => e.end && e.end.getTime() > now);
   if (!ev) {
-    return upcoming.length ? `Tonight: ${upcoming.length} sets, first at ${fmtWhen(upcoming[0].start, now)}` : 'No event scheduled';
+    return upcoming.length ? `Tonight: ${upcoming.length} sets, first at ${fmtWhen(upcoming[0].start, now)} ${zone()}` : 'No event scheduled';
   }
   const started = ev.firstSet.getTime() <= now;
   const when = started ? `started ${fmtTime(ev.firstSet)}` : `starts ${fmtWhen(ev.firstSet, now)} ${zone()}`;

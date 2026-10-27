@@ -1,6 +1,8 @@
 // node --test
 const test = require('node:test');
 const assert = require('node:assert/strict');
+// Expectations below are written in the local clock; display in it too.
+process.env.DISPLAY_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const C = require('./commands.js');
 const Z = new Date().toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
 const { summarize, extractLinks } = require('./lineup.js');
@@ -111,4 +113,17 @@ test('half-hour tips skip the !dj pointer during open decks', () => {
   assert.ok(open.every(tip => !/!dj/.test(tip)), 'no tip mentions !dj during open decks');
   assert.equal(new Set(open).size, 3, 'the other three still rotate');
   assert.equal(C.pickTip(0, [], NOW), 'Type !set for tonight\'s full lineup, or !event for what tonight is about');
+});
+
+test('times display in Eastern by default, whatever the host zone', () => {
+  const saved = process.env.DISPLAY_TZ;
+  delete process.env.DISPLAY_TZ;
+  try {
+    // 22:00 UTC is 6:00 PM EDT and 3:00 PM PDT.
+    assert.equal(C.fmtTime(new Date(Date.UTC(2026, 9, 21, 22, 0))), '6:00 PM');
+    // 03:30 UTC Thu is still Wed 11:30 PM Eastern: same day as 22:00 UTC Wed.
+    assert.equal(C.fmtWhen(new Date(Date.UTC(2026, 9, 22, 3, 30)), Date.UTC(2026, 9, 21, 22, 0)), '11:30 PM');
+  } finally {
+    process.env.DISPLAY_TZ = saved;
+  }
 });
